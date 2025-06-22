@@ -74,13 +74,25 @@
         <div class="p-4 bg-indigo-50 rounded-lg shadow-sm">
             <h2 class="text-xl font-semibold text-indigo-800 mb-2">1. Your Location</h2>
             <p class="text-sm text-gray-600 mb-3">
-                Enter the city or address you want to search for showtimes.
+                Choose how you want to provide your location.
             </p>
-            <input type="text" id="manualAddressInput" class="w-full p-3 border border-indigo-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out" placeholder="e.g., New York, NY or 10003">
-            <div id="locationInfo" class="mt-2 p-3 bg-white border border-indigo-200 rounded-md text-sm text-gray-700">
-                Location: Not entered.
+            <div class="space-y-3">
+                <div class="location-option">
+                    <input type="radio" id="autoLocation" name="locationMethod" value="auto" checked class="form-radio text-indigo-600">
+                    <label for="autoLocation" class="text-gray-800 font-medium">Use My Current Location (Automatic)</label>
+                </div>
+                <button id="getLocationBtn" class="btn-primary w-full sm:w-auto ml-6">Get My Location</button>
+                <div id="locationInfo" class="mt-2 p-3 bg-white border border-indigo-200 rounded-md text-sm text-gray-700">
+                    Location: Not yet obtained.
+                </div>
+                <div id="locationError" class="text-red-600 text-sm mt-2 hidden"></div>
+
+                <div class="location-option mt-4">
+                    <input type="radio" id="manualLocation" name="locationMethod" value="manual" class="form-radio text-indigo-600">
+                    <label for="manualLocation" class="text-gray-800 font-medium">Enter Location Manually</label>
+                </div>
+                <input type="text" id="manualAddressInput" class="w-full p-3 border border-indigo-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out ml-6" placeholder="e.g., New York, NY or 10003" disabled>
             </div>
-            <div id="locationError" class="text-red-600 text-sm mt-2 hidden"></div>
         </div>
 
         <!-- Distance Filter Section -->
@@ -161,9 +173,10 @@ Joker: Folie à Deux
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
 
         // Get references to DOM elements
-        const manualAddressInput = document.getElementById('manualAddressInput'); // Only manual input
+        const getLocationBtn = document.getElementById('getLocationBtn'); // Re-added for automatic location
+        const manualAddressInput = document.getElementById('manualAddressInput');
         const locationInfo = document.getElementById('locationInfo');
-        const locationError = document.getElementById('locationError'); // Kept for potential future use or manual validation
+        const locationError = document.getElementById('locationError');
         const movieListInput = document.getElementById('movieListInput');
         const findShowtimesBtn = document.getElementById('findShowtimesBtn');
         const resultsDiv = document.getElementById('results');
@@ -171,14 +184,36 @@ Joker: Folie à Deux
         const loadingIndicator = document.getElementById('loadingIndicator');
         const infoModal = document.getElementById('infoModal');
         const closeModalBtn = document.getElementById('closeModalBtn');
-        const distanceFilterSelect = document.getElementById('distanceFilterSelect'); // New distance filter element
+        const distanceFilterSelect = document.getElementById('distanceFilterSelect');
 
-        let userManualAddress = '';
-        let selectedDistance = parseInt(distanceFilterSelect.value); // Initialize with default selected value
+        const autoLocationRadio = document.getElementById('autoLocation'); // Re-added
+        const manualLocationRadio = document.getElementById('manualLocation'); // Re-added
+
+        let userManualAddress = ''; // This will store the city/address, whether manually entered or derived from geolocation
+        let selectedDistance = parseInt(distanceFilterSelect.value);
 
         // Update selectedDistance when the dropdown changes
         distanceFilterSelect.addEventListener('change', (event) => {
             selectedDistance = parseInt(event.target.value);
+        });
+
+        // --- Location Method Selection ---
+        autoLocationRadio.addEventListener('change', () => {
+            getLocationBtn.disabled = false;
+            manualAddressInput.disabled = true;
+            manualAddressInput.value = ''; // Clear manual input when switching back to auto
+            userManualAddress = ''; // Clear the stored manual address
+            locationInfo.textContent = 'Location: Not yet obtained.';
+            locationError.classList.add('hidden');
+        });
+
+        manualLocationRadio.addEventListener('change', () => {
+            getLocationBtn.disabled = true;
+            manualAddressInput.disabled = false;
+            locationInfo.textContent = 'Location: Manual input selected.';
+            locationError.classList.add('hidden');
+            // userLatitude and userLongitude are no longer globally managed for direct use,
+            // as we now prioritize userManualAddress for the "location" of the search.
         });
 
         manualAddressInput.addEventListener('input', (event) => {
@@ -186,7 +221,56 @@ Joker: Folie à Deux
             locationInfo.textContent = `Location: Manually entered "${userManualAddress}"`;
         });
 
+        // --- Geolocation Functionality (Now displays city) ---
+        getLocationBtn.addEventListener('click', () => {
+            if (autoLocationRadio.checked) {
+                locationInfo.textContent = 'Location: Attempting to get location...';
+                locationError.classList.add('hidden');
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            // In a real app, you would use a reverse geocoding API here
+                            // (e.g., Google Geocoding API) to convert lat/lon to an address.
+                            // For this demo, we'll simulate it with a generic NYC address.
+                            userManualAddress = "New York, NY"; // Simulate reverse geocoding result
+                            locationInfo.textContent = `Location: Detected as "${userManualAddress}"`;
+                            locationError.classList.add('hidden');
+                        },
+                        (error) => {
+                            locationInfo.textContent = 'Location: Failed to get location.';
+                            let errorMessage = 'Error getting location: ';
+                            switch (error.code) {
+                                case error.PERMISSION_DENIED:
+                                    errorMessage += 'User denied the request for Geolocation.';
+                                    break;
+                                case error.POSITION_UNAVAILABLE:
+                                    errorMessage += 'Location information is unavailable.';
+                                    break;
+                                case error.TIMEOUT:
+                                    errorMessage += 'The request to get user location timed out.';
+                                    break;
+                                case error.UNKNOWN_ERROR:
+                                    errorMessage += 'An unknown error occurred.';
+                                    break;
+                            }
+                            locationError.textContent = errorMessage + ' Please ensure location services are enabled and permissions are granted for this site.';
+                            locationError.classList.remove('hidden');
+                            userManualAddress = ''; // Clear address on error
+                        },
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                    );
+                } else {
+                    locationInfo.textContent = 'Location: Geolocation is not supported by this browser.';
+                    locationError.textContent = 'Your browser does not support Geolocation. Please use a modern browser.';
+                    locationError.classList.remove('hidden');
+                }
+            } else {
+                locationInfo.textContent = 'Location: Please select "Use My Current Location" to use automatic detection.';
+            }
+        });
+
         // Mock showtimes data with added 'distance' property (simulated miles from a central point in NYC)
+        // This data simulates showtimes for movies at different locations.
         const mockShowtimes = [
             {
                 movie: "Dune: Part Two",
@@ -271,7 +355,7 @@ Joker: Folie à Deux
             const locationProvided = userManualAddress.length > 0;
 
             if (!locationProvided) {
-                resultsDiv.innerHTML = '<p class="text-red-600">Please provide your location by entering an address before searching.</p>';
+                resultsDiv.innerHTML = '<p class="text-red-600">Please provide your location (either automatically or by entering an address) before searching.</p>';
                 loadingIndicator.classList.add('hidden');
                 return;
             }
@@ -287,6 +371,26 @@ Joker: Folie à Deux
                 loadingIndicator.classList.add('hidden');
                 return;
             }
+
+            // --- API Integration Point (Conceptual) ---
+            // If you had a Google Showtimes API or similar, this is where you would make your fetch call.
+            // Example (placeholder - this won't work without a real API and key):
+            /*
+            const GOOGLE_SHOWTIMES_API_KEY = "YOUR_API_KEY_HERE"; // <-- Paste your actual API Key here
+            const GOOGLE_SHOWTIMES_API_URL = "https://your-google-showtimes-api-endpoint.com/v1/showtimes"; // <-- Replace with actual API endpoint
+
+            try {
+                const response = await fetch(`${GOOGLE_SHOWTIMES_API_URL}?location=${encodeURIComponent(userManualAddress)}&movies=${encodeURIComponent(movieTitles.join(','))}&distance=${selectedDistance}&key=${GOOGLE_SHOWTIMES_API_KEY}`);
+                const realApiData = await response.json();
+                // Process realApiData and populate foundShowtimes array
+                // Example: realApiData.results.forEach(item => foundShowtimes.push(item));
+            } catch (apiError) {
+                console.error("Error fetching real showtimes:", apiError);
+                // Handle API errors, maybe show a message to the user
+            }
+            */
+            // --- End API Integration Point ---
+
 
             // Simulate API call delay
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -344,7 +448,8 @@ Deadpool & Wolverine
 Joker: Folie à Deux`;
 
         // Set initial manual address text for clarity
-        locationInfo.textContent = 'Location: Not entered.';
+        manualAddressInput.disabled = true; // Manual input disabled by default since auto is checked
+        locationInfo.textContent = 'Location: Not yet obtained.'; // Initial text for auto location
 
     </script>
 </body>
