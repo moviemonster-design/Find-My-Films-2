@@ -37,21 +37,6 @@
         .btn-primary:hover {
             background-color: #4338ca; /* Indigo-700 */
         }
-        .btn-secondary {
-            background-color: #6366f1; /* Indigo-500 */
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 0.375rem;
-            font-weight: 500;
-            transition: background-color 0.2s;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-        .btn-secondary:hover {
-            background-color: #4f46e5; /* Indigo-600 */
-        }
         textarea {
             resize: vertical;
         }
@@ -151,4 +136,263 @@ Joker: Folie à Deux
                     This demonstration focuses on the client-side aspects: obtaining your location and processing your movie watchlist.
                 </p>
                 <p class="mb-4 text-gray-700">
-                    **Real-time showtimes:** Directly searching "Google Showtimes" programmatically for live, location-specific showtimes is not typically supported or allowed without an official 
+                    **Real-time showtimes:** Directly searching "Google Showtimes" programmatically for live, location-specific showtimes is not typically supported or allowed without an official API from a service provider. For a full application, you would integrate with a movie showtimes API (e.g., from a ticket vendor or a dedicated movie data service).
+                </p>
+                <p class="mb-4 text-gray-700">
+                    **Daily scanning & notifications:** The full functionality of daily scanning and sending notifications (SMS, email, etc.) requires a **backend server** or cloud functions, a database to store your preferences and watchlist, and integration with third-party notification services (like Twilio for SMS, SendGrid for email). This web page alone cannot perform these actions due to browser security limitations.
+                </p>
+                <p class="text-gray-700">
+                    This demo uses a **mock dataset** for showtimes to illustrate the concept.
+                </p>
+                <div class="mt-6 text-right">
+                    <button id="closeModalBtn" class="btn-primary">Got It!</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Define global variables provided by the Canvas environment (or fallback for local testing)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        // FIX: Corrected the assignment of initialAuthToken to use the global __initial_auth_token
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
+
+        // Get references to DOM elements
+        const getLocationBtn = document.getElementById('getLocationBtn');
+        const locationInfo = document.getElementById('locationInfo');
+        const locationError = document.getElementById('locationError');
+        const movieListInput = document.getElementById('movieListInput');
+        const findShowtimesBtn = document.getElementById('findShowtimesBtn');
+        const resultsDiv = document.getElementById('results');
+        const resultsMessage = document.getElementById('resultsMessage');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const infoModal = document.getElementById('infoModal');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+
+        const autoLocationRadio = document.getElementById('autoLocation');
+        const manualLocationRadio = document.getElementById('manualLocation');
+        const manualAddressInput = document.getElementById('manualAddressInput');
+
+        let userLatitude = null;
+        let userLongitude = null;
+        let userManualAddress = '';
+
+        // Mock showtimes data (replace with actual API calls in a real application)
+        // This data simulates showtimes for movies at different locations.
+        const mockShowtimes = [
+            {
+                movie: "Dune: Part Two",
+                cinema: "Regal Union Square",
+                address: "850 Broadway, New York, NY 10003",
+                times: ["1:00 PM", "4:00 PM", "7:00 PM", "10:00 PM"],
+                link: "https://www.fandango.com/dune-part-two-231362/movie-times"
+            },
+            {
+                movie: "Dune: Part Two",
+                cinema: "AMC Kips Bay 15",
+                address: "550 2nd Ave, New York, NY 10016",
+                times: ["1:30 PM", "4:30 PM", "7:30 PM"],
+                link: "https://www.amctheatres.com/movies/dune-part-two-74677"
+            },
+            {
+                movie: "Inside Out 2",
+                cinema: "AMC Empire 25",
+                address: "234 W 42nd St, New York, NY 10036",
+                times: ["11:00 AM", "2:00 PM", "5:00 PM", "8:00 PM"],
+                link: "https://www.amctheatres.com/movies/inside-out-2-76345"
+            },
+            {
+                movie: "Inside Out 2",
+                cinema: "Village East by Angelika",
+                address: "181-189 2nd Ave, New York, NY 10003",
+                times: ["12:00 PM", "3:00 PM", "6:00 PM"],
+                link: "https://www.angelikafilmcenter.com/nyc/film/inside-out-2"
+            },
+            {
+                movie: "Deadpool & Wolverine",
+                cinema: "AMC Lincoln Square 13",
+                address: "1998 Broadway, New York, NY 10023",
+                times: ["7:00 PM", "9:45 PM"],
+                link: "https://www.amctheatres.com/movies/deadpool-wolverine-78901"
+            },
+            {
+                movie: "Joker: Folie à Deux",
+                cinema: "Nitehawk Cinema Williamsburg",
+                address: "136 Metropolitan Ave, Brooklyn, NY 11211",
+                times: ["8:00 PM"],
+                link: "https://nitehawkcinema.com/brooklyn/movies/joker-folie-a-deux/"
+            },
+            {
+                movie: "Barbie", // A movie not on the default list, for demonstration of non-matches
+                cinema: "AMC Kips Bay 15",
+                address: "550 2nd Ave, New York, NY 10016",
+                times: ["6:00 PM"],
+                link: "https://www.amctheatres.com/movies/barbie-72123"
+            }
+        ];
+
+        // --- Location Method Selection ---
+        autoLocationRadio.addEventListener('change', () => {
+            getLocationBtn.disabled = false;
+            manualAddressInput.disabled = true;
+            manualAddressInput.value = ''; // Clear manual input when switching back to auto
+            userManualAddress = '';
+            locationInfo.textContent = 'Location: Not yet obtained.';
+            locationError.classList.add('hidden');
+        });
+
+        manualLocationRadio.addEventListener('change', () => {
+            getLocationBtn.disabled = true;
+            manualAddressInput.disabled = false;
+            locationInfo.textContent = 'Location: Manual input selected.';
+            locationError.classList.add('hidden');
+            userLatitude = null; // Clear auto-detected location
+            userLongitude = null;
+        });
+
+        manualAddressInput.addEventListener('input', (event) => {
+            userManualAddress = event.target.value.trim();
+            locationInfo.textContent = `Location: Manually entered "${userManualAddress}"`;
+        });
+
+        // --- Geolocation Functionality ---
+        getLocationBtn.addEventListener('click', () => {
+            if (autoLocationRadio.checked) {
+                locationInfo.textContent = 'Location: Attempting to get location...';
+                locationError.classList.add('hidden');
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            userLatitude = position.coords.latitude;
+                            userLongitude = position.coords.longitude;
+                            locationInfo.textContent = `Location: Lat ${userLatitude.toFixed(4)}, Lon ${userLongitude.toFixed(4)}`;
+                            locationError.classList.add('hidden'); // Hide any previous error
+                        },
+                        (error) => {
+                            locationInfo.textContent = 'Location: Failed to get location.';
+                            let errorMessage = 'Error getting location: ';
+                            switch (error.code) {
+                                case error.PERMISSION_DENIED:
+                                    errorMessage += 'User denied the request for Geolocation.';
+                                    break;
+                                case error.POSITION_UNAVAILABLE:
+                                    errorMessage += 'Location information is unavailable.';
+                                    break;
+                                case error.TIMEOUT:
+                                    errorMessage += 'The request to get user location timed out.';
+                                    break;
+                                case error.UNKNOWN_ERROR:
+                                    errorMessage += 'An unknown error occurred.';
+                                    break;
+                            }
+                            locationError.textContent = errorMessage + ' Please ensure location services are enabled and permissions are granted for this site.';
+                            locationError.classList.remove('hidden');
+                            userLatitude = null;
+                            userLongitude = null; // Clear location if error
+                        },
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                    );
+                } else {
+                    locationInfo.textContent = 'Location: Geolocation is not supported by this browser.';
+                    locationError.textContent = 'Your browser does not support Geolocation. Please use a modern browser.';
+                    locationError.classList.remove('hidden');
+                }
+            } else {
+                locationInfo.textContent = 'Location: Please select "Use My Current Location" to use automatic detection.';
+            }
+        });
+
+        // --- Find Showtimes Functionality ---
+        findShowtimesBtn.addEventListener('click', async () => {
+            resultsDiv.innerHTML = ''; // Clear previous results
+            resultsMessage.classList.add('hidden');
+            loadingIndicator.classList.remove('hidden');
+
+            let locationProvided = false;
+            if (autoLocationRadio.checked && userLatitude !== null && userLongitude !== null) {
+                locationProvided = true;
+            } else if (manualLocationRadio.checked && userManualAddress.length > 0) {
+                locationProvided = true;
+            }
+
+            if (!locationProvided) {
+                resultsDiv.innerHTML = '<p class="text-red-600">Please provide your location (either automatically or manually) before searching.</p>';
+                loadingIndicator.classList.add('hidden');
+                return;
+            }
+
+            const movieTitles = movieListInput.value
+                .split('\n')
+                .map(title => title.trim())
+                .filter(title => title.length > 0)
+                .map(title => title.toLowerCase()); // Convert to lowercase for case-insensitive matching
+
+            if (movieTitles.length === 0) {
+                resultsDiv.innerHTML = '<p class="text-red-600">Please enter some movie titles in your watchlist.</p>';
+                loadingIndicator.classList.add('hidden');
+                return;
+            }
+
+            // Simulate API call delay
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            const foundShowtimes = [];
+            // Iterate through mock data to find matches
+            // In a real app, this would involve sending userLatitude/Longitude or userManualAddress
+            // to a backend API that can then query a real showtimes database.
+            mockShowtimes.forEach(showtime => {
+                if (movieTitles.includes(showtime.movie.toLowerCase())) { // Case-insensitive check
+                    // For demo purposes, we'll just show all mock showtimes that match the movie title
+                    // regardless of the user's provided location, as the mock data is fixed for NYC.
+                    // In a real application, you'd filter by proximity to userLatitude/Longitude or userManualAddress.
+                    foundShowtimes.push(showtime);
+                }
+            });
+
+            loadingIndicator.classList.add('hidden'); // Hide loading indicator
+
+            if (foundShowtimes.length > 0) {
+                foundShowtimes.forEach(showtime => {
+                    const showtimeCard = document.createElement('div');
+                    showtimeCard.className = 'bg-white p-4 rounded-lg shadow-md border border-purple-200';
+                    showtimeCard.innerHTML = `
+                        <h3 class="text-xl font-semibold text-purple-700">${showtime.movie}</h3>
+                        <p class="text-gray-800 mt-1"><strong class="text-indigo-600">Cinema:</strong> ${showtime.cinema}</p>
+                        <p class="text-gray-600 text-sm">${showtime.address}</p>
+                        <p class="text-gray-800 mt-2"><strong class="text-indigo-600">Showtimes:</strong> ${showtime.times.join(', ')}</p>
+                        <a href="${showtime.link}" target="_blank" class="inline-block mt-3 text-sm text-blue-600 hover:underline">
+                            View & Buy Tickets <span aria-hidden="true">&rarr;</span>
+                        </a>
+                    `;
+                    resultsDiv.appendChild(showtimeCard);
+                });
+                resultsMessage.textContent = `Found ${foundShowtimes.length} showtimes for your watchlist!`;
+                resultsMessage.classList.remove('hidden');
+            } else {
+                resultsDiv.innerHTML = '<p class="text-gray-700">No showtimes found for your selected movies near your location today. Try checking again later!</p>';
+                resultsMessage.textContent = 'No showtimes found.';
+                resultsMessage.classList.remove('hidden');
+            }
+        });
+
+        // --- Modal Control ---
+        // Show modal on page load
+        window.onload = () => {
+            infoModal.classList.remove('hidden');
+        };
+
+        // Close modal button
+        closeModalBtn.addEventListener('click', () => {
+            infoModal.classList.add('hidden');
+        });
+
+        // Pre-populate movie list for convenience
+        movieListInput.value = `Dune: Part Two
+Inside Out 2
+Deadpool & Wolverine
+Joker: Folie à Deux`;
+
+    </script>
+</body>
+</html>
