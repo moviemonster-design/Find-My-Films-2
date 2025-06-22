@@ -74,25 +74,28 @@
         <div class="p-4 bg-indigo-50 rounded-lg shadow-sm">
             <h2 class="text-xl font-semibold text-indigo-800 mb-2">1. Your Location</h2>
             <p class="text-sm text-gray-600 mb-3">
-                Choose how you want to provide your location.
+                Enter the city or address you want to search for showtimes.
             </p>
-            <div class="space-y-3">
-                <div class="location-option">
-                    <input type="radio" id="autoLocation" name="locationMethod" value="auto" checked class="form-radio text-indigo-600">
-                    <label for="autoLocation" class="text-gray-800 font-medium">Use My Current Location (Automatic)</label>
-                </div>
-                <button id="getLocationBtn" class="btn-primary w-full sm:w-auto ml-6">Get My Location</button>
-                <div id="locationInfo" class="mt-2 p-3 bg-white border border-indigo-200 rounded-md text-sm text-gray-700">
-                    Location: Not yet obtained.
-                </div>
-                <div id="locationError" class="text-red-600 text-sm mt-2 hidden"></div>
-
-                <div class="location-option mt-4">
-                    <input type="radio" id="manualLocation" name="locationMethod" value="manual" class="form-radio text-indigo-600">
-                    <label for="manualLocation" class="text-gray-800 font-medium">Enter Location Manually</label>
-                </div>
-                <input type="text" id="manualAddressInput" class="w-full p-3 border border-indigo-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out ml-6" placeholder="e.g., New York, NY or 10003" disabled>
+            <input type="text" id="manualAddressInput" class="w-full p-3 border border-indigo-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out" placeholder="e.g., New York, NY or 10003">
+            <div id="locationInfo" class="mt-2 p-3 bg-white border border-indigo-200 rounded-md text-sm text-gray-700">
+                Location: Not entered.
             </div>
+            <div id="locationError" class="text-red-600 text-sm mt-2 hidden"></div>
+        </div>
+
+        <!-- Distance Filter Section -->
+        <div class="p-4 bg-yellow-50 rounded-lg shadow-sm">
+            <h2 class="text-xl font-semibold text-yellow-800 mb-2">Distance Filter</h2>
+            <p class="text-sm text-gray-600 mb-3">
+                Show me cinemas within:
+            </p>
+            <select id="distanceFilterSelect" class="w-full p-3 border border-yellow-300 rounded-md focus:ring-yellow-500 focus:border-yellow-500 transition duration-150 ease-in-out">
+                <option value="999">Any Distance</option>
+                <option value="2">2 Miles</option>
+                <option value="5" selected>5 Miles</option>
+                <option value="10">10 Miles</option>
+                <option value="20">20 Miles</option>
+            </select>
         </div>
 
         <!-- Movie List Section -->
@@ -120,7 +123,7 @@ Joker: Folie à Deux
         <div class="p-4 bg-purple-50 rounded-lg shadow-sm">
             <h2 class="text-xl font-semibold text-purple-800 mb-4">3. Showtimes Found</h2>
             <div id="results" class="space-y-4">
-                <p class="text-gray-600">No showtimes found yet. Get your location or enter an address, then enter your watchlist to begin.</p>
+                <p class="text-gray-600">No showtimes found yet. Enter an address and your watchlist to begin.</p>
             </div>
             <div id="resultsMessage" class="mt-4 text-center text-gray-700 hidden"></div>
             <div id="loadingIndicator" class="mt-4 text-center text-blue-600 hidden">
@@ -142,7 +145,7 @@ Joker: Folie à Deux
                     **Daily scanning & notifications:** The full functionality of daily scanning and sending notifications (SMS, email, etc.) requires a **backend server** or cloud functions, a database to store your preferences and watchlist, and integration with third-party notification services (like Twilio for SMS, SendGrid for email). This web page alone cannot perform these actions due to browser security limitations.
                 </p>
                 <p class="text-gray-700">
-                    This demo uses a **mock dataset** for showtimes to illustrate the concept.
+                    This demo uses a **mock dataset** for showtimes to illustrate the concept, including simulated distances.
                 </p>
                 <div class="mt-6 text-right">
                     <button id="closeModalBtn" class="btn-primary">Got It!</button>
@@ -155,13 +158,12 @@ Joker: Folie à Deux
         // Define global variables provided by the Canvas environment (or fallback for local testing)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        // FIX: Corrected the assignment of initialAuthToken to use the global __initial_auth_token
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
 
         // Get references to DOM elements
-        const getLocationBtn = document.getElementById('getLocationBtn');
+        const manualAddressInput = document.getElementById('manualAddressInput'); // Only manual input
         const locationInfo = document.getElementById('locationInfo');
-        const locationError = document.getElementById('locationError');
+        const locationError = document.getElementById('locationError'); // Kept for potential future use or manual validation
         const movieListInput = document.getElementById('movieListInput');
         const findShowtimesBtn = document.getElementById('findShowtimesBtn');
         const resultsDiv = document.getElementById('results');
@@ -169,86 +171,14 @@ Joker: Folie à Deux
         const loadingIndicator = document.getElementById('loadingIndicator');
         const infoModal = document.getElementById('infoModal');
         const closeModalBtn = document.getElementById('closeModalBtn');
+        const distanceFilterSelect = document.getElementById('distanceFilterSelect'); // New distance filter element
 
-        const autoLocationRadio = document.getElementById('autoLocation');
-        const manualLocationRadio = document.getElementById('manualLocation');
-        const manualAddressInput = document.getElementById('manualAddressInput');
-
-        let userLatitude = null;
-        let userLongitude = null;
         let userManualAddress = '';
+        let selectedDistance = parseInt(distanceFilterSelect.value); // Initialize with default selected value
 
-        // Mock showtimes data (replace with actual API calls in a real application)
-        // This data simulates showtimes for movies at different locations.
-        const mockShowtimes = [
-            {
-                movie: "Dune: Part Two",
-                cinema: "Regal Union Square",
-                address: "850 Broadway, New York, NY 10003",
-                times: ["1:00 PM", "4:00 PM", "7:00 PM", "10:00 PM"],
-                link: "https://www.fandango.com/dune-part-two-231362/movie-times"
-            },
-            {
-                movie: "Dune: Part Two",
-                cinema: "AMC Kips Bay 15",
-                address: "550 2nd Ave, New York, NY 10016",
-                times: ["1:30 PM", "4:30 PM", "7:30 PM"],
-                link: "https://www.amctheatres.com/movies/dune-part-two-74677"
-            },
-            {
-                movie: "Inside Out 2",
-                cinema: "AMC Empire 25",
-                address: "234 W 42nd St, New York, NY 10036",
-                times: ["11:00 AM", "2:00 PM", "5:00 PM", "8:00 PM"],
-                link: "https://www.amctheatres.com/movies/inside-out-2-76345"
-            },
-            {
-                movie: "Inside Out 2",
-                cinema: "Village East by Angelika",
-                address: "181-189 2nd Ave, New York, NY 10003",
-                times: ["12:00 PM", "3:00 PM", "6:00 PM"],
-                link: "https://www.angelikafilmcenter.com/nyc/film/inside-out-2"
-            },
-            {
-                movie: "Deadpool & Wolverine",
-                cinema: "AMC Lincoln Square 13",
-                address: "1998 Broadway, New York, NY 10023",
-                times: ["7:00 PM", "9:45 PM"],
-                link: "https://www.amctheatres.com/movies/deadpool-wolverine-78901"
-            },
-            {
-                movie: "Joker: Folie à Deux",
-                cinema: "Nitehawk Cinema Williamsburg",
-                address: "136 Metropolitan Ave, Brooklyn, NY 11211",
-                times: ["8:00 PM"],
-                link: "https://nitehawkcinema.com/brooklyn/movies/joker-folie-a-deux/"
-            },
-            {
-                movie: "Barbie", // A movie not on the default list, for demonstration of non-matches
-                cinema: "AMC Kips Bay 15",
-                address: "550 2nd Ave, New York, NY 10016",
-                times: ["6:00 PM"],
-                link: "https://www.amctheatres.com/movies/barbie-72123"
-            }
-        ];
-
-        // --- Location Method Selection ---
-        autoLocationRadio.addEventListener('change', () => {
-            getLocationBtn.disabled = false;
-            manualAddressInput.disabled = true;
-            manualAddressInput.value = ''; // Clear manual input when switching back to auto
-            userManualAddress = '';
-            locationInfo.textContent = 'Location: Not yet obtained.';
-            locationError.classList.add('hidden');
-        });
-
-        manualLocationRadio.addEventListener('change', () => {
-            getLocationBtn.disabled = true;
-            manualAddressInput.disabled = false;
-            locationInfo.textContent = 'Location: Manual input selected.';
-            locationError.classList.add('hidden');
-            userLatitude = null; // Clear auto-detected location
-            userLongitude = null;
+        // Update selectedDistance when the dropdown changes
+        distanceFilterSelect.addEventListener('change', (event) => {
+            selectedDistance = parseInt(event.target.value);
         });
 
         manualAddressInput.addEventListener('input', (event) => {
@@ -256,52 +186,81 @@ Joker: Folie à Deux
             locationInfo.textContent = `Location: Manually entered "${userManualAddress}"`;
         });
 
-        // --- Geolocation Functionality ---
-        getLocationBtn.addEventListener('click', () => {
-            if (autoLocationRadio.checked) {
-                locationInfo.textContent = 'Location: Attempting to get location...';
-                locationError.classList.add('hidden');
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            userLatitude = position.coords.latitude;
-                            userLongitude = position.coords.longitude;
-                            locationInfo.textContent = `Location: Lat ${userLatitude.toFixed(4)}, Lon ${userLongitude.toFixed(4)}`;
-                            locationError.classList.add('hidden'); // Hide any previous error
-                        },
-                        (error) => {
-                            locationInfo.textContent = 'Location: Failed to get location.';
-                            let errorMessage = 'Error getting location: ';
-                            switch (error.code) {
-                                case error.PERMISSION_DENIED:
-                                    errorMessage += 'User denied the request for Geolocation.';
-                                    break;
-                                case error.POSITION_UNAVAILABLE:
-                                    errorMessage += 'Location information is unavailable.';
-                                    break;
-                                case error.TIMEOUT:
-                                    errorMessage += 'The request to get user location timed out.';
-                                    break;
-                                case error.UNKNOWN_ERROR:
-                                    errorMessage += 'An unknown error occurred.';
-                                    break;
-                            }
-                            locationError.textContent = errorMessage + ' Please ensure location services are enabled and permissions are granted for this site.';
-                            locationError.classList.remove('hidden');
-                            userLatitude = null;
-                            userLongitude = null; // Clear location if error
-                        },
-                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-                    );
-                } else {
-                    locationInfo.textContent = 'Location: Geolocation is not supported by this browser.';
-                    locationError.textContent = 'Your browser does not support Geolocation. Please use a modern browser.';
-                    locationError.classList.remove('hidden');
-                }
-            } else {
-                locationInfo.textContent = 'Location: Please select "Use My Current Location" to use automatic detection.';
+        // Mock showtimes data with added 'distance' property (simulated miles from a central point in NYC)
+        const mockShowtimes = [
+            {
+                movie: "Dune: Part Two",
+                cinema: "Regal Union Square",
+                address: "850 Broadway, New York, NY 10003",
+                times: ["1:00 PM", "4:00 PM", "7:00 PM", "10:00 PM"],
+                link: "https://www.fandango.com/dune-part-two-231362/movie-times",
+                distance: 0.5 // Simulated distance in miles
+            },
+            {
+                movie: "Dune: Part Two",
+                cinema: "AMC Kips Bay 15",
+                address: "550 2nd Ave, New York, NY 10016",
+                times: ["1:30 PM", "4:30 PM", "7:30 PM"],
+                link: "https://www.amctheatres.com/movies/dune-part-two-74677",
+                distance: 1.2
+            },
+            {
+                movie: "Inside Out 2",
+                cinema: "AMC Empire 25",
+                address: "234 W 42nd St, New York, NY 10036",
+                times: ["11:00 AM", "2:00 PM", "5:00 PM", "8:00 PM"],
+                link: "https://www.amctheatres.com/movies/inside-out-2-76345",
+                distance: 0.8
+            },
+            {
+                movie: "Inside Out 2",
+                cinema: "Village East by Angelika",
+                address: "181-189 2nd Ave, New York, NY 10003",
+                times: ["12:00 PM", "3:00 PM", "6:00 PM"],
+                link: "https://www.angelikafilmcenter.com/nyc/film/inside-out-2",
+                distance: 1.5
+            },
+            {
+                movie: "Deadpool & Wolverine",
+                cinema: "AMC Lincoln Square 13",
+                address: "1998 Broadway, New York, NY 10023",
+                times: ["7:00 PM", "9:45 PM"],
+                link: "https://www.amctheatres.com/movies/deadpool-wolverine-78901",
+                distance: 2.1
+            },
+            {
+                movie: "Joker: Folie à Deux",
+                cinema: "Nitehawk Cinema Williamsburg",
+                address: "136 Metropolitan Ave, Brooklyn, NY 11211",
+                times: ["8:00 PM"],
+                link: "https://nitehawkcinema.com/brooklyn/movies/joker-folie-a-deux/",
+                distance: 3.5
+            },
+            {
+                movie: "Barbie", // A movie not on the default list, for demonstration of non-matches
+                cinema: "AMC Kips Bay 15",
+                address: "550 2nd Ave, New York, NY 10016",
+                times: ["6:00 PM"],
+                link: "https://www.amctheatres.com/movies/barbie-72123",
+                distance: 1.3
+            },
+            {
+                movie: "Oppenheimer", // A movie typically further away
+                cinema: "Alamo Drafthouse Lower Manhattan",
+                address: "28 Liberty St, New York, NY 10005",
+                times: ["6:00 PM", "9:30 PM"],
+                link: "https://drafthouse.com/nyc/showtimes/alamo-drafthouse-lower-manhattan",
+                distance: 4.8
+            },
+            {
+                movie: "Past Lives", // Another movie with varying distance
+                cinema: "Film Forum",
+                address: "209 W Houston St, New York, NY 10014",
+                times: ["2:00 PM", "7:00 PM"],
+                link: "https://filmforum.org/film/past-lives",
+                distance: 6.2
             }
-        });
+        ];
 
         // --- Find Showtimes Functionality ---
         findShowtimesBtn.addEventListener('click', async () => {
@@ -309,15 +268,10 @@ Joker: Folie à Deux
             resultsMessage.classList.add('hidden');
             loadingIndicator.classList.remove('hidden');
 
-            let locationProvided = false;
-            if (autoLocationRadio.checked && userLatitude !== null && userLongitude !== null) {
-                locationProvided = true;
-            } else if (manualLocationRadio.checked && userManualAddress.length > 0) {
-                locationProvided = true;
-            }
+            const locationProvided = userManualAddress.length > 0;
 
             if (!locationProvided) {
-                resultsDiv.innerHTML = '<p class="text-red-600">Please provide your location (either automatically or manually) before searching.</p>';
+                resultsDiv.innerHTML = '<p class="text-red-600">Please provide your location by entering an address before searching.</p>';
                 loadingIndicator.classList.add('hidden');
                 return;
             }
@@ -338,14 +292,9 @@ Joker: Folie à Deux
             await new Promise(resolve => setTimeout(resolve, 1500));
 
             const foundShowtimes = [];
-            // Iterate through mock data to find matches
-            // In a real app, this would involve sending userLatitude/Longitude or userManualAddress
-            // to a backend API that can then query a real showtimes database.
+            // Iterate through mock data to find matches and apply distance filter
             mockShowtimes.forEach(showtime => {
-                if (movieTitles.includes(showtime.movie.toLowerCase())) { // Case-insensitive check
-                    // For demo purposes, we'll just show all mock showtimes that match the movie title
-                    // regardless of the user's provided location, as the mock data is fixed for NYC.
-                    // In a real application, you'd filter by proximity to userLatitude/Longitude or userManualAddress.
+                if (movieTitles.includes(showtime.movie.toLowerCase()) && showtime.distance <= selectedDistance) {
                     foundShowtimes.push(showtime);
                 }
             });
@@ -361,16 +310,17 @@ Joker: Folie à Deux
                         <p class="text-gray-800 mt-1"><strong class="text-indigo-600">Cinema:</strong> ${showtime.cinema}</p>
                         <p class="text-gray-600 text-sm">${showtime.address}</p>
                         <p class="text-gray-800 mt-2"><strong class="text-indigo-600">Showtimes:</strong> ${showtime.times.join(', ')}</p>
+                        <p class="text-gray-600 text-sm">Distance: ${showtime.distance} miles (simulated)</p>
                         <a href="${showtime.link}" target="_blank" class="inline-block mt-3 text-sm text-blue-600 hover:underline">
                             View & Buy Tickets <span aria-hidden="true">&rarr;</span>
                         </a>
                     `;
                     resultsDiv.appendChild(showtimeCard);
                 });
-                resultsMessage.textContent = `Found ${foundShowtimes.length} showtimes for your watchlist!`;
+                resultsMessage.textContent = `Found ${foundShowtimes.length} showtimes for your watchlist within ${selectedDistance} miles!`;
                 resultsMessage.classList.remove('hidden');
             } else {
-                resultsDiv.innerHTML = '<p class="text-gray-700">No showtimes found for your selected movies near your location today. Try checking again later!</p>';
+                resultsDiv.innerHTML = '<p class="text-gray-700">No showtimes found for your selected movies matching the criteria. Try adjusting the distance filter or checking again later!</p>';
                 resultsMessage.textContent = 'No showtimes found.';
                 resultsMessage.classList.remove('hidden');
             }
@@ -392,6 +342,9 @@ Joker: Folie à Deux
 Inside Out 2
 Deadpool & Wolverine
 Joker: Folie à Deux`;
+
+        // Set initial manual address text for clarity
+        locationInfo.textContent = 'Location: Not entered.';
 
     </script>
 </body>
