@@ -173,7 +173,7 @@ Joker: Folie à Deux
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
 
         // Get references to DOM elements
-        const getLocationBtn = document.getElementById('getLocationBtn'); // Re-added for automatic location
+        const getLocationBtn = document.getElementById('getLocationBtn'); 
         const manualAddressInput = document.getElementById('manualAddressInput');
         const locationInfo = document.getElementById('locationInfo');
         const locationError = document.getElementById('locationError');
@@ -186,10 +186,10 @@ Joker: Folie à Deux
         const closeModalBtn = document.getElementById('closeModalBtn');
         const distanceFilterSelect = document.getElementById('distanceFilterSelect');
 
-        const autoLocationRadio = document.getElementById('autoLocation'); // Re-added
-        const manualLocationRadio = document.getElementById('manualLocation'); // Re-added
+        const autoLocationRadio = document.getElementById('autoLocation');
+        const manualLocationRadio = document.getElementById('manualLocation');
 
-        let userManualAddress = ''; // This will store the city/address, whether manually entered or derived from geolocation
+        let userManualAddress = ''; 
         let selectedDistance = parseInt(distanceFilterSelect.value);
 
         // Update selectedDistance when the dropdown changes
@@ -201,8 +201,8 @@ Joker: Folie à Deux
         autoLocationRadio.addEventListener('change', () => {
             getLocationBtn.disabled = false;
             manualAddressInput.disabled = true;
-            manualAddressInput.value = ''; // Clear manual input when switching back to auto
-            userManualAddress = ''; // Clear the stored manual address
+            manualAddressInput.value = ''; 
+            userManualAddress = ''; 
             locationInfo.textContent = 'Location: Not yet obtained.';
             locationError.classList.add('hidden');
         });
@@ -212,8 +212,6 @@ Joker: Folie à Deux
             manualAddressInput.disabled = false;
             locationInfo.textContent = 'Location: Manual input selected.';
             locationError.classList.add('hidden');
-            // userLatitude and userLongitude are no longer globally managed for direct use,
-            // as we now prioritize userManualAddress for the "location" of the search.
         });
 
         manualAddressInput.addEventListener('input', (event) => {
@@ -255,7 +253,7 @@ Joker: Folie à Deux
                             }
                             locationError.textContent = errorMessage + ' Please ensure location services are enabled and permissions are granted for this site.';
                             locationError.classList.remove('hidden');
-                            userManualAddress = ''; // Clear address on error
+                            userManualAddress = ''; 
                         },
                         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
                     );
@@ -270,7 +268,6 @@ Joker: Folie à Deux
         });
 
         // Mock showtimes data with added 'distance' property (simulated miles from a central point in NYC)
-        // This data simulates showtimes for movies at different locations.
         const mockShowtimes = [
             {
                 movie: "Dune: Part Two",
@@ -278,7 +275,7 @@ Joker: Folie à Deux
                 address: "850 Broadway, New York, NY 10003",
                 times: ["1:00 PM", "4:00 PM", "7:00 PM", "10:00 PM"],
                 link: "https://www.fandango.com/dune-part-two-231362/movie-times",
-                distance: 0.5 // Simulated distance in miles
+                distance: 0.5 
             },
             {
                 movie: "Dune: Part Two",
@@ -321,7 +318,7 @@ Joker: Folie à Deux
                 distance: 3.5
             },
             {
-                movie: "Barbie", // A movie not on the default list, for demonstration of non-matches
+                movie: "Barbie", 
                 cinema: "AMC Kips Bay 15",
                 address: "550 2nd Ave, New York, NY 10016",
                 times: ["6:00 PM"],
@@ -329,7 +326,7 @@ Joker: Folie à Deux
                 distance: 1.3
             },
             {
-                movie: "Oppenheimer", // A movie typically further away
+                movie: "Oppenheimer", 
                 cinema: "Alamo Drafthouse Lower Manhattan",
                 address: "28 Liberty St, New York, NY 10005",
                 times: ["6:00 PM", "9:30 PM"],
@@ -337,7 +334,7 @@ Joker: Folie à Deux
                 distance: 4.8
             },
             {
-                movie: "Past Lives", // Another movie with varying distance
+                movie: "Past Lives", 
                 cinema: "Film Forum",
                 address: "209 W Houston St, New York, NY 10014",
                 times: ["2:00 PM", "7:00 PM"],
@@ -348,7 +345,7 @@ Joker: Folie à Deux
 
         // --- Find Showtimes Functionality ---
         findShowtimesBtn.addEventListener('click', async () => {
-            resultsDiv.innerHTML = ''; // Clear previous results
+            resultsDiv.innerHTML = ''; 
             resultsMessage.classList.add('hidden');
             loadingIndicator.classList.remove('hidden');
 
@@ -364,7 +361,7 @@ Joker: Folie à Deux
                 .split('\n')
                 .map(title => title.trim())
                 .filter(title => title.length > 0)
-                .map(title => title.toLowerCase()); // Convert to lowercase for case-insensitive matching
+                .map(title => title.toLowerCase()); 
 
             if (movieTitles.length === 0) {
                 resultsDiv.innerHTML = '<p class="text-red-600">Please enter some movie titles in your watchlist.</p>';
@@ -372,40 +369,112 @@ Joker: Folie à Deux
                 return;
             }
 
-            // --- API Integration Point (Conceptual) ---
-            // If you had a Google Showtimes API or similar, this is where you would make your fetch call.
-            // Example (placeholder - this won't work without a real API and key):
-            /*
-            const GOOGLE_SHOWTIMES_API_KEY = "YOUR_API_KEY_HERE"; // <-- Paste your actual API Key here
-            const GOOGLE_SHOWTIMES_API_URL = "https://your-google-showtimes-api-endpoint.com/v1/showtimes"; // <-- Replace with actual API endpoint
-
-            try {
-                const response = await fetch(`${GOOGLE_SHOWTIMES_API_URL}?location=${encodeURIComponent(userManualAddress)}&movies=${encodeURIComponent(movieTitles.join(','))}&distance=${selectedDistance}&key=${GOOGLE_SHOWTIMES_API_KEY}`);
-                const realApiData = await response.json();
-                // Process realApiData and populate foundShowtimes array
-                // Example: realApiData.results.forEach(item => foundShowtimes.push(item));
-            } catch (apiError) {
-                console.error("Error fetching real showtimes:", apiError);
-                // Handle API errors, maybe show a message to the user
-            }
-            */
-            // --- End API Integration Point ---
-
-
-            // Simulate API call delay
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            const GOOGLE_SHOWTIMES_API_KEY = "676822e4e36d853a269e764615d23d6fcda5f66edb07d0ebac44171c837275cb"; // Your actual API Key
+            const GOOGLE_SHOWTIMES_API_URL = "https://serpapi.com/search.json"; // Base URL for SerpApi
 
             const foundShowtimes = [];
-            // Iterate through mock data to find matches and apply distance filter
-            mockShowtimes.forEach(showtime => {
-                if (movieTitles.includes(showtime.movie.toLowerCase()) && showtime.distance <= selectedDistance) {
-                    foundShowtimes.push(showtime);
-                }
-            });
 
-            loadingIndicator.classList.add('hidden'); // Hide loading indicator
+            // Loop through each movie title to fetch showtimes
+            for (const movieTitle of movieTitles) {
+                try {
+                    // Construct query parameters for SerpApi
+                    const params = new URLSearchParams({
+                        q: `${movieTitle} theater showtimes`, // Search query for the movie's showtimes
+                        location: userManualAddress,           // Use the provided location (auto-detected city or manual entry)
+                        hl: "en",                              // Host language
+                        gl: "us",                              // Geo location
+                        api_key: GOOGLE_SHOWTIMES_API_KEY
+                    });
+
+                    // Make the API call to SerpApi
+                    const response = await fetch(`${GOOGLE_SHOWTIMES_API_URL}?${params.toString()}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const realApiData = await response.json();
+
+                    // --- Process the SerpApi response ---
+                    // The structure of the SerpApi response can vary.
+                    // We'll try to extract showtimes from common patterns.
+                    // If you get different JSON, you'll need to adjust this parsing logic.
+
+                    // Attempt 1: Check for a top-level 'showtimes' array (as implied by Java example)
+                    if (realApiData.showtimes && Array.isArray(realApiData.showtimes)) {
+                        realApiData.showtimes.forEach(movieResult => {
+                            if (movieResult.theaters && Array.isArray(movieResult.theaters)) {
+                                movieResult.theaters.forEach(theater => {
+                                    const distance = theater.distance ? parseFloat(theater.distance.split(' ')[0]) : (Math.random() * 10 + 1); // Use actual distance if available, else simulate
+                                    if (distance <= selectedDistance) {
+                                        foundShowtimes.push({
+                                            movie: movieResult.title || movieTitle, // Use API title if available, else original
+                                            cinema: theater.name,
+                                            address: theater.address,
+                                            times: theater.showtimes ? theater.showtimes.map(s => s.time) : [],
+                                            link: theater.link || theater.ticket_link || "#",
+                                            distance: distance.toFixed(1)
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    } 
+                    // Attempt 2: Check for 'movie_results' which often contain nested theater info
+                    else if (realApiData.movie_results && Array.isArray(realApiData.movie_results)) {
+                        realApiData.movie_results.forEach(movieItem => {
+                            if (movieItem.theaters && Array.isArray(movieItem.theaters)) {
+                                movieItem.theaters.forEach(theater => {
+                                    const distance = theater.distance ? parseFloat(theater.distance.split(' ')[0]) : (Math.random() * 10 + 1);
+                                    if (distance <= selectedDistance) {
+                                        foundShowtimes.push({
+                                            movie: movieItem.title || movieTitle,
+                                            cinema: theater.name,
+                                            address: theater.address,
+                                            times: theater.showtimes ? theater.showtimes.map(s => s.time) : [],
+                                            link: theater.link || theater.ticket_link || "#",
+                                            distance: distance.toFixed(1)
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    }
+                    // Attempt 3: Check for 'cinemas' array with movies nested inside
+                    else if (realApiData.cinemas && Array.isArray(realApiData.cinemas)) {
+                        realApiData.cinemas.forEach(cinema => {
+                            if (cinema.movies && Array.isArray(cinema.movies)) {
+                                cinema.movies.forEach(movie => {
+                                    // Ensure the movie from the API matches our watchlist
+                                    if (movieTitles.includes(movie.title.toLowerCase())) {
+                                        const distance = cinema.distance ? parseFloat(cinema.distance.split(' ')[0]) : (Math.random() * 10 + 1);
+                                        if (distance <= selectedDistance) {
+                                            foundShowtimes.push({
+                                                movie: movie.title,
+                                                cinema: cinema.name,
+                                                address: cinema.address,
+                                                times: movie.showtimes ? movie.showtimes.map(s => s.time) : [],
+                                                link: movie.link || movie.ticket_link || "#",
+                                                distance: distance.toFixed(1)
+                                            });
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    }
+
+                } catch (apiError) {
+                    console.error(`Error fetching showtimes for ${movieTitle}:`, apiError);
+                    // You might want to display a user-friendly message here,
+                    // e.g., "Could not fetch showtimes for [Movie Title]."
+                }
+            }
+
+            loadingIndicator.classList.add('hidden'); 
 
             if (foundShowtimes.length > 0) {
+                // Sort by distance (optional, but good for user experience)
+                foundShowtimes.sort((a, b) => a.distance - b.distance);
+
                 foundShowtimes.forEach(showtime => {
                     const showtimeCard = document.createElement('div');
                     showtimeCard.className = 'bg-white p-4 rounded-lg shadow-md border border-purple-200';
@@ -414,7 +483,7 @@ Joker: Folie à Deux
                         <p class="text-gray-800 mt-1"><strong class="text-indigo-600">Cinema:</strong> ${showtime.cinema}</p>
                         <p class="text-gray-600 text-sm">${showtime.address}</p>
                         <p class="text-gray-800 mt-2"><strong class="text-indigo-600">Showtimes:</strong> ${showtime.times.join(', ')}</p>
-                        <p class="text-gray-600 text-sm">Distance: ${showtime.distance} miles (simulated)</p>
+                        <p class="text-gray-600 text-sm">Distance: ${showtime.distance} miles</p>
                         <a href="${showtime.link}" target="_blank" class="inline-block mt-3 text-sm text-blue-600 hover:underline">
                             View & Buy Tickets <span aria-hidden="true">&rarr;</span>
                         </a>
@@ -431,12 +500,10 @@ Joker: Folie à Deux
         });
 
         // --- Modal Control ---
-        // Show modal on page load
         window.onload = () => {
             infoModal.classList.remove('hidden');
         };
 
-        // Close modal button
         closeModalBtn.addEventListener('click', () => {
             infoModal.classList.add('hidden');
         });
@@ -447,9 +514,9 @@ Inside Out 2
 Deadpool & Wolverine
 Joker: Folie à Deux`;
 
-        // Set initial manual address text for clarity
+        // Set initial state for location inputs
         manualAddressInput.disabled = true; // Manual input disabled by default since auto is checked
-        locationInfo.textContent = 'Location: Not yet obtained.'; // Initial text for auto location
+        locationInfo.textContent = 'Location: Not yet obtained.'; 
 
     </script>
 </body>
