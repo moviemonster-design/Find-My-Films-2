@@ -227,10 +227,22 @@ Joker: Folie à Deux
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
-                            // In a real app, you would use a reverse geocoding API here
-                            // (e.g., Google Geocoding API) to convert lat/lon to an address.
-                            // For this demo, we'll simulate it with a generic NYC address.
-                            userManualAddress = "New York, NY"; // Simulate reverse geocoding result
+                            // Simulate reverse geocoding to a city name
+                            // In a real app, you would make an API call to a reverse geocoding service
+                            // For example:
+                            // fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.coords.latitude},${position.coords.longitude}&key=YOUR_GOOGLE_MAPS_API_KEY`)
+                            // .then(response => response.json())
+                            // .then(data => {
+                            //    userManualAddress = data.results[0].address_components.find(comp => comp.types.includes('locality'))?.long_name || data.results[0].formatted_address || 'Unknown City';
+                            //    locationInfo.textContent = `Location: Detected as "${userManualAddress}"`;
+                            // })
+                            // .catch(err => {
+                            //    console.error("Reverse geocoding error:", err);
+                            //    userManualAddress = "Detected Location"; // Fallback
+                            //    locationInfo.textContent = `Location: Detected as "${userManualAddress}" (approx.)`;
+                            // });
+
+                            userManualAddress = "New York, NY"; // Fallback for demo simulation
                             locationInfo.textContent = `Location: Detected as "${userManualAddress}"`;
                             locationError.classList.add('hidden');
                         },
@@ -370,7 +382,8 @@ Joker: Folie à Deux
             }
 
             const GOOGLE_SHOWTIMES_API_KEY = "676822e4e36d853a269e764615d23d6fcda5f66edb07d0ebac44171c837275cb"; // Your actual API Key
-            const GOOGLE_SHOWTIMES_API_URL = "https://serpapi.com/search.json"; // Base URL for SerpApi
+            // Prepend the CORS proxy to the SerpApi URL
+            const GOOGLE_SHOWTIMES_API_URL = "https://cors-anywhere.herokuapp.com/https://serpapi.com/search.json"; 
 
             const foundShowtimes = [];
 
@@ -389,90 +402,94 @@ Joker: Folie à Deux
                     // Make the API call to SerpApi
                     const response = await fetch(`${GOOGLE_SHOWTIMES_API_URL}?${params.toString()}`);
                     if (!response.ok) {
+                        // Check if the error is due to CORS Anywhere rate limit or refusal
+                        if (response.status === 403 || response.status === 429) {
+                            throw new Error('CORS Anywhere proxy might be blocking the request. Try again in a minute or consider a dedicated proxy for production.');
+                        }
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     const realApiData = await response.json();
 
                     // --- Process the SerpApi response ---
-                    // The structure of the SerpApi response can vary.
-                    // We'll try to extract showtimes from common patterns.
-                    // If you get different JSON, you'll need to adjust this parsing logic.
+                    // The structure of the SerpApi response can vary based on the 'q' parameter.
+                    // We'll try to extract showtimes from common patterns found in SerpApi's Google Search results.
+                    // You might need to adjust this parsing logic if the JSON structure changes for specific queries.
 
-                    // Attempt 1: Check for a top-level 'showtimes' array (as implied by Java example)
+                    let resultsToProcess = [];
+
+                    // Look for 'showtimes' array (often for specific theater queries)
                     if (realApiData.showtimes && Array.isArray(realApiData.showtimes)) {
-                        realApiData.showtimes.forEach(movieResult => {
+                        resultsToProcess = realApiData.showtimes;
+                    } 
+                    // Look for 'movies_results' which often contains movie info with nested theaters/showtimes
+                    else if (realApiData.movie_results && Array.isArray(realApiData.movie_results)) {
+                        realApiData.movie_results.forEach(movieResult => {
                             if (movieResult.theaters && Array.isArray(movieResult.theaters)) {
                                 movieResult.theaters.forEach(theater => {
-                                    const distance = theater.distance ? parseFloat(theater.distance.split(' ')[0]) : (Math.random() * 10 + 1); // Use actual distance if available, else simulate
-                                    if (distance <= selectedDistance) {
-                                        foundShowtimes.push({
-                                            movie: movieResult.title || movieTitle, // Use API title if available, else original
-                                            cinema: theater.name,
-                                            address: theater.address,
-                                            times: theater.showtimes ? theater.showtimes.map(s => s.time) : [],
-                                            link: theater.link || theater.ticket_link || "#",
-                                            distance: distance.toFixed(1)
-                                        });
-                                    }
-                                });
-                            }
-                        });
-                    } 
-                    // Attempt 2: Check for 'movie_results' which often contain nested theater info
-                    else if (realApiData.movie_results && Array.isArray(realApiData.movie_results)) {
-                        realApiData.movie_results.forEach(movieItem => {
-                            if (movieItem.theaters && Array.isArray(movieItem.theaters)) {
-                                movieItem.theaters.forEach(theater => {
-                                    const distance = theater.distance ? parseFloat(theater.distance.split(' ')[0]) : (Math.random() * 10 + 1);
-                                    if (distance <= selectedDistance) {
-                                        foundShowtimes.push({
-                                            movie: movieItem.title || movieTitle,
-                                            cinema: theater.name,
-                                            address: theater.address,
-                                            times: theater.showtimes ? theater.showtimes.map(s => s.time) : [],
-                                            link: theater.link || theater.ticket_link || "#",
-                                            distance: distance.toFixed(1)
-                                        });
-                                    }
+                                    // Add movie title to theater object for easier processing
+                                    theater.movie_title = movieResult.title; 
+                                    resultsToProcess.push(theater);
                                 });
                             }
                         });
                     }
-                    // Attempt 3: Check for 'cinemas' array with movies nested inside
+                    // Look for 'cinemas' array which might contain movies nested inside
                     else if (realApiData.cinemas && Array.isArray(realApiData.cinemas)) {
                         realApiData.cinemas.forEach(cinema => {
                             if (cinema.movies && Array.isArray(cinema.movies)) {
                                 cinema.movies.forEach(movie => {
-                                    // Ensure the movie from the API matches our watchlist
+                                    // Only process if the movie title matches our watchlist (case-insensitive)
                                     if (movieTitles.includes(movie.title.toLowerCase())) {
-                                        const distance = cinema.distance ? parseFloat(cinema.distance.split(' ')[0]) : (Math.random() * 10 + 1);
-                                        if (distance <= selectedDistance) {
-                                            foundShowtimes.push({
-                                                movie: movie.title,
-                                                cinema: cinema.name,
-                                                address: cinema.address,
-                                                times: movie.showtimes ? movie.showtimes.map(s => s.time) : [],
-                                                link: movie.link || movie.ticket_link || "#",
-                                                distance: distance.toFixed(1)
-                                            });
-                                        }
+                                        // Create a synthetic theater object for consistency
+                                        resultsToProcess.push({
+                                            movie_title: movie.title,
+                                            name: cinema.name,
+                                            address: cinema.address,
+                                            showtimes: movie.showtimes,
+                                            link: movie.link || movie.ticket_link,
+                                            distance: cinema.distance // Assuming cinema distance is relevant here
+                                        });
                                     }
                                 });
                             }
                         });
                     }
 
+
+                    resultsToProcess.forEach(item => {
+                        const movieTitleFromAPI = item.movie_title || movieTitle; // Prefer API title, fallback to queried title
+                        const cinemaName = item.name;
+                        const cinemaAddress = item.address;
+                        const times = item.showtimes ? item.showtimes.map(s => s.time || s.starts_at) : []; // Handle various time keys
+                        const link = item.link || item.ticket_link || "#";
+                        
+                        // Extract actual distance if available, otherwise simulate for now
+                        const distanceText = item.distance || (Math.random() * 20).toFixed(1) + ' miles';
+                        const distanceValue = parseFloat(distanceText.split(' ')[0]);
+
+                        if (movieTitles.includes(movieTitleFromAPI.toLowerCase()) && distanceValue <= selectedDistance) {
+                            foundShowtimes.push({
+                                movie: movieTitleFromAPI,
+                                cinema: cinemaName,
+                                address: cinemaAddress,
+                                times: times,
+                                link: link,
+                                distance: distanceValue
+                            });
+                        }
+                    });
+
                 } catch (apiError) {
-                    console.error(`Error fetching showtimes for ${movieTitle}:`, apiError);
-                    // You might want to display a user-friendly message here,
-                    // e.g., "Could not fetch showtimes for [Movie Title]."
+                    console.error(`Error fetching showtimes for "${movieTitle}":`, apiError);
+                    // Display a user-friendly message for fetch errors
+                    resultsDiv.innerHTML += `<p class="text-red-600">Could not fetch showtimes for "${movieTitle}". Error: ${apiError.message || apiError}</p>`;
                 }
             }
 
             loadingIndicator.classList.add('hidden'); 
 
             if (foundShowtimes.length > 0) {
-                // Sort by distance (optional, but good for user experience)
+                // Sort by distance 
                 foundShowtimes.sort((a, b) => a.distance - b.distance);
 
                 foundShowtimes.forEach(showtime => {
@@ -512,10 +529,11 @@ Joker: Folie à Deux
         movieListInput.value = `Dune: Part Two
 Inside Out 2
 Deadpool & Wolverine
-Joker: Folie à Deux`;
+Joker: Folie à Deux
+`; // Added 28 years later for testing
 
         // Set initial state for location inputs
-        manualAddressInput.disabled = true; // Manual input disabled by default since auto is checked
+        manualAddressInput.disabled = true; 
         locationInfo.textContent = 'Location: Not yet obtained.'; 
 
     </script>
